@@ -1,5 +1,7 @@
 # second-brain-receipts
 
+[![CI](https://github.com/abdupa/second-brain-receipts/actions/workflows/ci.yml/badge.svg)](https://github.com/abdupa/second-brain-receipts/actions/workflows/ci.yml)
+
 A hiring-assessment POC for a Telegram receipt-processing Second Brain sub-agent.
 **V0.1-009 is complete:** receipt photos pass from authenticated
 Telegram ingress through image validation, Vision extraction, saved-category lookup,
