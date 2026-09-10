@@ -6,7 +6,8 @@
 - Completed: one shared bounded retry policy across all four provider boundaries,
   per-operation retryability decided by idempotence, reconciled writes for Supabase
   inserts and S3 uploads, an escaped MarkdownV2 summary card, a runtime Dockerfile,
-  and a CI pipeline running every check on each push.
+  a CI pipeline running every check on each push, and deterministic resolution of
+  ambiguous printed dates.
 - Active work: none. No milestone blocker remains.
 - Next action: V0.1-010 only when authorized; exact scope below.
 
@@ -21,13 +22,18 @@ Created:
 - .github/workflows/ci.yml: three jobs covering unit tests/lint/types, migrations
   plus SQL and concurrency checks on disposable PostgreSQL, and a container build
   with a start-up smoke test. No job requires a secret.
+- src/second_brain_receipts/domain/receipt_date.py and tests/unit/test_receipt_date.py:
+  deterministic reading of an ambiguous printed date, with 25 cases covering both
+  orders, unambiguous values, unparsable text and impossible calendar dates.
 
 Changed: the OpenAI, Telegram, Supabase and S3 adapters now call `retry`;
 `_insert_reconciled` and `S3ReceiptImageStorage.store` reconcile uncertain writes;
 `TelegramClient.send_message` accepts an optional `parse_mode`; `receipt_messages.py`
 gained `escape_markdown_v2` and the summary card; the two success call sites in
-`receipt_processor.py` and `pending_workflow.py` opt into MarkdownV2. No new runtime
-dependency, configuration variable, table or migration was added.
+`receipt_processor.py` and `pending_workflow.py` opt into MarkdownV2; the OpenAI
+provider carries a transport-only `date_text` and resolves it before validation. One
+configuration variable was added, `RECEIPT_DATE_ORDER`. No new runtime dependency,
+table or migration was added.
 
 ## Bounded retries and reconciliation
 
@@ -72,6 +78,35 @@ delivery failure, not a cosmetic one. Escaping runs after the existing
 control-character collapse, so a forged newline cannot fabricate an extra field line.
 Every other message stays literal plain text with no parse_mode.
 
+## Ambiguous printed dates
+
+`08/09/2026` means 8 September in most of the world and 9 August in the United States.
+The image cannot settle it, and the model does not abstain: live runs read it
+month-first every time, at High confidence, on a receipt with a Cebu City address and
+a Philippine VAT registration. A wrong day on a financial record is not acceptable, and
+a prompt asking the model to weigh regional clues changed nothing.
+
+So the decision moved into code. The wire schema gained `date_text`, which the model
+fills with the date copied exactly as printed; live runs transcribed it verbatim and
+identically across four attempts. `domain/receipt_date.py` then applies the configured
+`RECEIPT_DATE_ORDER` to that string, and the resolved value is written back into the
+payload before validation. The model reads, the application decides.
+
+The default is `day_first`, matching this deployment's single configured locale, which
+already assumes one currency and presents every date as DD/MM/YYYY. `month_first` suits
+United States receipts and `auto` keeps the model's own reading.
+
+Policy applies only to a genuine tie. A printed value that identifies the day on its
+own, such as `25/12/2026` or a spelled-out month, is left exactly as the model read it,
+as is anything unrecognized, absent, or resolving to a date that does not exist. In
+every one of those cases the model's reading stands, so the feature can only correct an
+ambiguous date, never invent one.
+
+`date_text` is transport only. It is consumed during parsing and never reaches
+`ReceiptExtraction`, the database or any message, so no schema, migration or downstream
+component changed. Verified live: the same receipt yields 2026-09-08 under `day_first`
+and 2026-08-09 under `month_first` and `auto`, with the total unaffected.
+
 ## Container packaging
 
 A two-stage `python:3.12-slim` build installs only the exactly pinned runtime
@@ -87,16 +122,16 @@ Python 3.12.13, pytest 9.1.1, Ruff 0.16.6, mypy 1.20.2:
 
 ```text
 .venv/bin/python -m pytest
-528 passed in 35.76s
+561 passed in 35.78s
 
 .venv/bin/python -m ruff check .
 All checks passed!
 
 .venv/bin/python -m ruff format --check .
-61 files already formatted
+63 files already formatted
 
 .venv/bin/python -m mypy
-Success: no issues found in 39 source files
+Success: no issues found in 40 source files
 
 .venv/bin/python -m pip check
 No broken requirements found.
@@ -165,16 +200,13 @@ were observed that offline tests could not have shown:
   detection and category memory all key on `normalize_vendor_name`, which casefolds,
   all three collapse to one identity. This is empirical confirmation that the
   normalization step is load-bearing, not decorative.
-- An ambiguous numeric date is read with the US month-first convention and still
+- An ambiguous numeric date was read with the US month-first convention and still
   reported as High confidence. The test receipt printed `08/09/2026` intending
   8 September, and every run returned 9 August, despite Philippine regional clues on
   the receipt (Cebu City address, VAT REG TIN). Adding a prompt instruction to use
-  regional clues and lower confidence changed nothing across three further runs, so no
-  prompt change was adopted. The correct fix is deterministic application logic, a
-  configured date-order preference applied to a raw date string, consistent with this
-  project's rule that the model reads and the application decides. That needs a wire
-  schema change to carry the date as printed, so it is deferred rather than rushed.
-  Until then, an ambiguous day-month date can be recorded wrongly at High confidence.
+  those clues and lower confidence changed nothing across three further runs, so no
+  prompt wording was adopted. This is now fixed deterministically instead; see
+  "Ambiguous printed dates" below.
 
 ### A live-only defect this uncovered
 
@@ -222,8 +254,9 @@ registered, and no live extraction or Telegram message occurred.
 - Only the OpenAI Vision path has been exercised live. Telegram delivery, Supabase
   writes and S3 uploads are still offline-verified only, so the end-to-end figure from
   photo received to reply sent is not yet measured.
-- An ambiguous numeric date can be recorded with the wrong day and month at High
-  confidence. See the live verification section above.
+- Date order is a per-deployment setting, not per receipt. A single installation
+  handling receipts printed in both conventions would still misread one of them, and
+  the model's confidence score does not signal the ambiguity.
 - Stand-in PostgreSQL roles and mocked HTTP do not prove live Supabase/PostgREST, S3
   privacy, Telegram delivery or extraction accuracy/latency. The container smoke test
   used fake credentials and therefore exercised start-up and routing only.

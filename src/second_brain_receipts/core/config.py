@@ -5,6 +5,7 @@ from typing import Literal, Self
 from pydantic import Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from second_brain_receipts.domain.receipt_date import DateOrder
 from second_brain_receipts.domain.storage import validate_bucket_name
 
 
@@ -34,6 +35,11 @@ class Settings(BaseSettings):
     s3_bucket_name: str | None = None
     s3_presigned_url_ttl_seconds: int = Field(default=300, ge=1, le=3600)
     default_currency: str = Field(default="PHP", pattern=r"^[A-Z]{3}$")
+    # How to read a printed date whose day and month are both 12 or less. Defaults to
+    # day-first for consistency with the single configured locale: this application
+    # already assumes one currency and presents every date as DD/MM/YYYY. Set
+    # month_first for United States receipts, or auto to keep the model's own reading.
+    receipt_date_order: DateOrder = "day_first"
     pending_receipt_ttl_minutes: int = Field(default=30, gt=0)
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
 

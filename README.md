@@ -45,6 +45,7 @@ Blank values do not mean “use the default.” Never commit `.env`.
 | OPENAI_MODEL | gpt-4o; configurable model supporting images and strict Structured Outputs |
 | OPENAI_TIMEOUT_SECONDS | 30; positive, maximum 120; SDK I/O timeout and request deadline |
 | DEFAULT_CURRENCY | PHP; uppercase three-letter application currency code |
+| RECEIPT_DATE_ORDER | day_first; also month_first or auto. How to read a printed date whose day and month are both 12 or less |
 | PENDING_RECEIPT_TTL_MINUTES | 30; positive integer |
 | MAX_UPLOAD_BYTES | 10485760 (10 MiB); positive integer |
 | IMAGE_MAX_LONG_EDGE | 1600; 128–4096 pixels |

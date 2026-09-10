@@ -95,11 +95,22 @@ The prompt treats receipt text as untrusted data, forbids fabrication, distingui
 final total from subtotal, requests only explicit VAT, and uses ISO transaction
 dates. Categories are suggestions; confidence is exactly High/Medium/Low.
 
+The wire schema carries one field the domain model does not: `date_text`, the
+transaction date copied exactly as printed. A numeric date such as `08/09/2026` is
+genuinely ambiguous, and live runs showed gpt-4o resolving it month-first at High
+confidence even on a receipt with clear non-US regional markers, so the reading is
+settled by `domain/receipt_date.py` under the configured `RECEIPT_DATE_ORDER` rather
+than by the model. Resolution happens before validation and only breaks a genuine
+tie: an unambiguous, unrecognized, absent or impossible value leaves the model's own
+reading untouched. `date_text` is consumed during parsing and never reaches
+`ReceiptExtraction`, storage or any message.
+
 The provider-specific envelope is `{ "receipt": <receipt object or null> }`.
-The object uses the same seven domain fields; every schema property is required,
-VAT/category permit null, and extra properties are forbidden. Money uses JSON
-numbers. This small equivalent wire schema avoids exposing the domain Decimal
-number/string union to the model. A test checks field parity with ReceiptExtraction.
+The object uses the seven domain fields plus date_text; every schema property is
+required, VAT/category/date_text permit null, and extra properties are forbidden.
+Money uses JSON numbers. This small equivalent wire schema avoids exposing the domain
+Decimal number/string union to the model. A test pins the wire fields to exactly the
+domain fields plus date_text, so neither set can drift unnoticed.
 Receipt=null means the required vendor/date/total cannot be read without invention.
 SDK refusal content and null receipt raise ReceiptExtractionError. There are no
 fallback vendors, zero totals, inferred VAT or current-date placeholders.

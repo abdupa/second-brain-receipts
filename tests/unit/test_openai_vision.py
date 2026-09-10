@@ -159,6 +159,53 @@ def test_exact_numeric_token_parsing(image, settings, receipt):
     assert asyncio.run(extract()).total_amount == Decimal("9999999999.99")
 
 
+def date_response(image, receipt, order, *, date_text, model_date="2026-08-09"):
+    """A receipt whose printed date is ambiguous, read under a configured order."""
+    settings = Settings(app_env="test", _env_file=None, receipt_date_order=order)
+    body = response_body(
+        json.dumps({"receipt": {**receipt, "date": model_date, "date_text": date_text}})
+    )
+    extract, _ = run_provider(image, settings, body)
+    return asyncio.run(extract())
+
+
+@pytest.mark.parametrize(
+    ("order", "expected"),
+    [
+        # gpt-4o was observed reading 08/09/2026 as 9 August with High confidence even
+        # on a receipt carrying non-US regional clues, so the application decides.
+        ("day_first", date(2026, 9, 8)),
+        ("month_first", date(2026, 8, 9)),
+        ("auto", date(2026, 8, 9)),
+    ],
+)
+def test_configured_order_settles_an_ambiguous_printed_date(image, receipt, order, expected):
+    result = date_response(image, receipt, order, date_text="08/09/2026")
+    assert result.date == expected
+
+
+def test_unambiguous_printed_date_is_never_reinterpreted(image, receipt):
+    # 25 cannot be a month, so the printed form already identifies the day and policy
+    # must not touch it, whatever the configured order says.
+    for order in ("day_first", "month_first", "auto"):
+        result = date_response(
+            image, receipt, order, date_text="25/12/2026", model_date="2026-12-25"
+        )
+        assert result.date == date(2026, 12, 25)
+
+
+@pytest.mark.parametrize("date_text", [None, "September 8, 2026", "unreadable"])
+def test_missing_or_unparsable_date_text_keeps_the_model_reading(image, receipt, date_text):
+    result = date_response(image, receipt, "day_first", date_text=date_text)
+    assert result.date == date(2026, 8, 9)
+
+
+def test_date_text_never_reaches_the_domain_model(image, receipt):
+    result = date_response(image, receipt, "day_first", date_text="08/09/2026")
+    assert not hasattr(result, "date_text")
+    assert "date_text" not in ReceiptExtraction.model_fields
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -357,8 +404,14 @@ def test_image_transport_model_and_strict_schema(image, settings, receipt, caplo
     assert request["temperature"] == 0
     schema = request["text"]["format"]["schema"]
     fields = schema["properties"]["receipt"]["anyOf"][0]
-    assert set(fields["properties"]) == set(ReceiptExtraction.model_fields)
-    assert set(fields["required"]) == set(ReceiptExtraction.model_fields)
+    # The wire schema is the domain fields plus date_text, which is transport only:
+    # it carries the date as printed so the application can settle an ambiguous
+    # day/month order, and it is consumed during parsing rather than reaching the
+    # domain model. Every wire field stays required so the model cannot omit one.
+    wire_only = {"date_text"}
+    assert set(fields["properties"]) == set(ReceiptExtraction.model_fields) | wire_only
+    assert set(fields["required"]) == set(ReceiptExtraction.model_fields) | wire_only
+    assert wire_only.isdisjoint(ReceiptExtraction.model_fields)
     assert fields["additionalProperties"] is False
     assert fields["properties"]["total_amount"]["type"] == "number"
     for value in (encoded, FAKE_KEY, "ABC Hardware", "100.5"):
