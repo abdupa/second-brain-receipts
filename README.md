@@ -226,18 +226,21 @@ currency, Decimal amounts and optional VAT.
 ```text
 ✅ *Receipt Processed*
 
-*Vendor*: ABC Hardware
-*Date*: 10/09/2026
-*Total*: PHP 1,280\.00
-*VAT*: PHP 137\.14
-*Category*: Maintenance
-*Confidence*: High
+*Vendor*: `ABC Hardware`
+*Date*: `10/09/2026`
+*Total*: `PHP 1,280.00`
+*VAT*: `PHP 137.14`
+*Category*: `Maintenance`
+*Confidence*: `High`
 ```
 
-Every interpolated value is escaped for MarkdownV2 first. Receipt text is untrusted
-model output, so a vendor name like `_[Vendor]*` renders literally instead of as
-formatting, and a correctly escaped message is also what keeps Telegram from
-rejecting the send outright. Every other message stays plain text.
+Receipt text is untrusted model output, so the card defends against two separate
+things Telegram does to message text. Escaping handles MarkdownV2 itself, keeping a
+vendor name like `_[Vendor]*` literal and keeping the send from being rejected
+outright. Code spans handle the rest: Telegram auto-links URLs, hashtags and mentions
+regardless of parse mode, which escaping cannot prevent, so every extracted value is
+rendered inside a code span, where that scan does not apply. Verified against the live
+Bot API. Every other message stays plain text.
 
 Apply migration 004 before running this version. It restricts confirmed categories
 in the database: existing oversized, untrimmed or control-containing categories need

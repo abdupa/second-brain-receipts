@@ -53,15 +53,15 @@ def test_escape_markdown_v2_neutralizes_every_reserved_character_at_once():
     assert escaped == "".join(f"\\{char}" for char in RESERVED)
 
 
-def test_success_summary_card_is_bold_labelled_and_escaped():
+def test_success_summary_card_has_bold_labels_and_code_span_values():
     message = success_summary(_receipt(), "PHP")
     assert message.startswith("✅ *Receipt Processed*\n\n")
-    assert "*Vendor*: ABC Hardware" in message
-    assert "*Date*: 10/09/2026" in message
-    assert "*Total*: PHP 1,280\\.00" in message
-    assert "*VAT*: PHP 137\\.14" in message
-    assert "*Category*: Maintenance" in message
-    assert "*Confidence*: High" in message
+    assert "*Vendor*: `ABC Hardware`" in message
+    assert "*Date*: `10/09/2026`" in message
+    assert "*Total*: `PHP 1,280.00`" in message
+    assert "*VAT*: `PHP 137.14`" in message
+    assert "*Category*: `Maintenance`" in message
+    assert "*Confidence*: `High`" in message
 
 
 def test_success_summary_omits_vat_line_when_absent():
@@ -69,26 +69,52 @@ def test_success_summary_omits_vat_line_when_absent():
     assert "VAT" not in message
 
 
-def test_success_summary_escapes_injected_formatting_and_forged_labels():
-    # A receipt image is untrusted input the model transcribes verbatim; a vendor
-    # name can legitimately contain MarkdownV2 syntax characters or attempt to forge
-    # a fake field line via an embedded newline.
+def test_every_value_is_inside_a_code_span():
+    # Telegram scans message text for URLs, hashtags and mentions regardless of
+    # parse_mode, and escaping does not prevent it because it is not Markdown. Text
+    # inside a code entity is exempt, so no value may sit outside one. Backticks must
+    # therefore pair up across the whole message.
+    for message in (remembered_summary(_receipt(), "PHP"), success_summary(_receipt(), "PHP")):
+        unescaped = message.replace("\\`", "")
+        assert unescaped.count("`") % 2 == 0
+
+
+def test_injected_link_and_hashtag_cannot_be_auto_linked():
+    # A crafted receipt image could carry a URL the model transcribes verbatim. Inside
+    # a code span it stays inert, so the bot never renders a live attacker-supplied
+    # link in a message it vouches for.
+    receipt = _receipt(
+        vendor_name="PayPal verify at https://evil.invalid",
+        category="#urgent @admin",
+    )
+    message = success_summary(receipt, "PHP")
+    for value in ("https://evil.invalid", "#urgent @admin"):
+        # Present verbatim, and enclosed by the code span rather than loose in the text.
+        start = message.index(value)
+        assert message.rindex("`", 0, start) < start
+        assert message.index("`", start + len(value)) >= start + len(value)
+
+
+def test_success_summary_neutralizes_formatting_and_forged_labels():
+    # An embedded newline could otherwise forge an extra field line, and MarkdownV2
+    # syntax could otherwise become real formatting.
     receipt = _receipt(vendor_name="_[Vendor]*\nTotal: 0.01", category="`Category`~test")
     message = success_summary(receipt, "PHP")
     # The embedded newline never survives to create a new, forged line.
     assert "\nTotal: 0.01" not in message
-    # Every MarkdownV2 syntax character in the untrusted text is escaped, so Telegram
-    # renders it as literal text instead of interpreting it as formatting.
-    assert "\\_\\[Vendor\\]\\*" in message
-    assert "\\`Category\\`\\~test" in message
-    # The real total amount, not the injected one, is the only "Total" figure shown.
-    assert "*Total*: PHP 1,280\\.00" in message
+    # Inside a code span the value is literal, so MarkdownV2 syntax needs no escaping
+    # and stays exactly as printed on the receipt.
+    assert "`_[Vendor]* Total: 0.01`" in message
+    # A backtick in the value would otherwise close the span early, so it is escaped.
+    assert "`\\`Category\\`~test`" in message
+    # The real total, not the injected one, is the only "Total" figure shown.
+    assert "*Total*: `PHP 1,280.00`" in message
 
 
 def test_remembered_summary_includes_success_card_and_memory_note():
     message = remembered_summary(_receipt(), "PHP")
     assert message.startswith(success_summary(_receipt(), "PHP"))
-    assert "Saved category memory for ABC Hardware: Maintenance\\." in message
+    assert "Saved category memory for `ABC Hardware`: `Maintenance`\\." in message
 
 
 def test_worst_case_escaping_still_fits_telegram_message_limit():

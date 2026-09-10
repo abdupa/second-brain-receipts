@@ -78,6 +78,22 @@ delivery failure, not a cosmetic one. Escaping runs after the existing
 control-character collapse, so a forged newline cannot fabricate an extra field line.
 Every other message stays literal plain text with no parse_mode.
 
+Escaping alone is not enough, which only live testing revealed. Independently of
+parse_mode, Telegram scans message text for URLs, hashtags, mentions and emails and
+makes them clickable; escaping does not stop this, because it is not Markdown. A
+crafted receipt reading "PayPal, verify at https://evil.example" would therefore
+render a live attacker-supplied link inside a message the bot vouches for. Text inside
+a code entity is exempt from that scan, so every value in the card and in the memory
+note is rendered as a code span, with only backtick and backslash escaped inside it.
+
+This was confirmed both ways against the live Bot API by reading the entities Telegram
+itself returns. The same hostile value produced `url` and `hashtag` entities in
+ordinary escaped text, and produces only `code` entities now, with no `url`,
+`text_link`, `hashtag`, `mention` or `email` anywhere in the message. Note this was
+never a regression introduced by MarkdownV2: Telegram auto-links plain text too, so
+the earlier plain-text summary had the same exposure. Formatting the card is what made
+it visible.
+
 ## Ambiguous printed dates
 
 `08/09/2026` means 8 September in most of the world and 9 August in the United States.
@@ -122,7 +138,7 @@ Python 3.12.13, pytest 9.1.1, Ruff 0.16.6, mypy 1.20.2:
 
 ```text
 .venv/bin/python -m pytest
-561 passed in 35.78s
+563 passed in 35.78s
 
 .venv/bin/python -m ruff check .
 All checks passed!
@@ -249,8 +265,9 @@ registered, and no live extraction or Telegram message occurred.
   There is no scheduled expiry, orphan sweeper, durable cleanup ledger or
   notification-replay worker.
 - Claims remain at-most-once attempts; received/failed updates do not auto-replay.
-- MarkdownV2 escaping is verified against Telegram's documented reserved set in unit
-  tests, not against the live Bot API. A live send remains a deployment check.
+- The summary card is verified against the live Bot API: real sends were accepted,
+  and Telegram's returned entities confirm values render as inert code spans with no
+  auto-linked URL, hashtag or mention. Unit tests pin the same contract offline.
 - Only the OpenAI Vision path has been exercised live. Telegram delivery, Supabase
   writes and S3 uploads are still offline-verified only, so the end-to-end figure from
   photo received to reply sent is not yet measured.

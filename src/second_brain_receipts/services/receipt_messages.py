@@ -2,10 +2,21 @@
 
 Only the execution-summary "card" (success_summary/remembered_summary) opts into
 Telegram MarkdownV2 formatting, since that is the one message the assignment asks to
-be a formatted card. Every value placed in that card, static label text included,
-passes through escape_markdown_v2 so a vendor/category name containing MarkdownV2
-syntax characters renders as literal text instead of being interpreted as formatting
-or breaking the send (Telegram rejects an incorrectly escaped MarkdownV2 message).
+be a formatted card. Two separate defences apply to it, because Telegram applies two
+separate kinds of interpretation to message text.
+
+Escaping handles MarkdownV2 itself: label text and any value outside a code span goes
+through escape_markdown_v2, so a vendor name containing MarkdownV2 syntax renders
+literally instead of becoming formatting, and the message is not rejected outright
+(Telegram refuses an incorrectly escaped MarkdownV2 message).
+
+Code spans handle the rest. Independently of parse_mode, Telegram scans message text
+for URLs, hashtags, mentions and emails and makes them clickable, which escaping does
+not prevent because it is not Markdown. Receipt text is attacker-influenced, so a
+crafted image could otherwise put a live link inside a message this bot vouches for.
+Text inside a code entity is exempt from that scan, so every extracted value is
+rendered as a code span. Verified against the live Bot API: the same hostile string
+produces url and hashtag entities in normal text, and only a code entity inside one.
 """
 
 from typing import Final, Literal
@@ -24,6 +35,18 @@ def escape_markdown_v2(text: str) -> str:
 
 def _bold(text: str) -> str:
     return f"*{escape_markdown_v2(text)}*"
+
+
+def _code(text: str) -> str:
+    """Render a value as an inline code span, which Telegram never auto-links.
+
+    Inside a code entity only the backtick and the backslash are special, and the
+    backslash must be escaped first so the escape added for a backtick is not itself
+    doubled. Every other character, including URL and hashtag syntax, stays literal
+    and inert.
+    """
+    escaped = text.replace("\\", "\\\\").replace("`", "\\`")
+    return f"`{escaped}`"
 
 
 UNREADABLE = (
@@ -47,17 +70,19 @@ MARKDOWN_V2: Final[Literal["MarkdownV2"]] = "MarkdownV2"
 
 
 def _field(label: str, value: str) -> str:
-    # ":" is not a reserved MarkdownV2 character, so only the label and value need
-    # escaping; the label is our own fixed text but is still routed through the
-    # escaper (via _bold) for consistency and defense in depth.
-    return f"{_bold(label)}: {escape_markdown_v2(value)}"
+    # ":" is not a reserved MarkdownV2 character, so only the label needs escaping,
+    # which _bold does. The value goes in a code span: that keeps it literal and also
+    # exempts it from Telegram's own URL/hashtag detection, which escaping cannot stop.
+    # Every value is treated the same way, including ones this module generates, so no
+    # future field can be added on the unprotected path by accident.
+    return f"{_bold(label)}: {_code(value)}"
 
 
 def success_summary(receipt: Receipt, currency: str) -> str:
-    # Every dynamic field goes through escape_markdown_v2 (via _field) so a
-    # vendor/category name that happens to contain MarkdownV2 syntax characters
-    # (e.g. "_[Vendor]*") renders as literal text rather than formatting or breaking
-    # the send. See the module docstring for why this message alone uses MarkdownV2.
+    # Every value is rendered as a code span (via _field), so a vendor or category
+    # containing MarkdownV2 syntax such as "_[Vendor]*", or a URL a crafted receipt
+    # image might carry, stays inert literal text. See the module docstring for the
+    # two distinct interpretations this defends against.
     lines = [
         "✅ *Receipt Processed*",
         "",
@@ -112,10 +137,15 @@ def category_prompt(vendor_name: str) -> str:
 
 
 def remembered_summary(receipt: Receipt, currency: str) -> str:
-    # success_summary is already fully escaped; escape this sentence once as a whole
-    # (its own punctuation included) rather than re-escaping already-escaped text.
-    note = escape_markdown_v2(
-        f"Saved category memory for {display_value(receipt.vendor_name)}: "
-        f"{display_value(receipt.category)}."
+    # The two extracted values go in code spans for the same reason as the card above;
+    # only the fixed wording around them is ordinary escaped prose. Interpolating them
+    # into that prose instead would put attacker-influenced text back on the
+    # auto-linking path that the card deliberately avoids.
+    note = (
+        escape_markdown_v2("Saved category memory for ")
+        + _code(display_value(receipt.vendor_name))
+        + ": "
+        + _code(display_value(receipt.category))
+        + escape_markdown_v2(".")
     )
     return f"{success_summary(receipt, currency)}\n\n{note}"

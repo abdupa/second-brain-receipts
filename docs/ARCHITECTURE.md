@@ -502,17 +502,29 @@ Stored domain values retain their full precision and content.
 
 The execution-summary card (`success_summary`, and `remembered_summary` after a
 category reply) is the one message sent with `parse_mode=MarkdownV2`: bold field
-labels over a `✅ Receipt Processed` header. Every value it interpolates passes
-through `escape_markdown_v2`, which backslash-escapes the full reserved set
-``_*[]()~`>#+-=|{}.!\`` documented for
-[MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style). Escaping is
-required for two independent reasons: receipt text is untrusted model output, so an
-injected `_[Vendor]*` must render literally rather than as formatting; and Telegram
-rejects an incorrectly escaped MarkdownV2 message outright, so a missed escape would
-be a delivery failure, not a cosmetic bug. Escaping applies after the existing
-control-character collapse, so a forged newline cannot fabricate an extra field line
-either. Every other message (errors, prompts, duplicate and cancellation notices)
-remains literal plain text with no parse_mode, which needs no escaping at all.
+labels over a `✅ Receipt Processed` header, with every value rendered as a code span.
+Two distinct defences apply, because Telegram interprets message text in two distinct
+ways.
+
+Label text and any value outside a code span passes through `escape_markdown_v2`,
+which backslash-escapes the full reserved set ``_*[]()~`>#+-=|{}.!\`` documented for
+[MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style). That is needed for
+two reasons: receipt text is untrusted model output, so an injected `_[Vendor]*` must
+render literally rather than as formatting; and Telegram rejects an incorrectly escaped
+MarkdownV2 message outright, so a missed escape would be a delivery failure, not a
+cosmetic bug. Escaping applies after the existing control-character collapse, so a
+forged newline cannot fabricate an extra field line either.
+
+Escaping does not stop Telegram's own entity detection, which runs regardless of
+parse_mode and turns URLs, hashtags, mentions and emails into clickable links. A
+crafted receipt image could otherwise place a live attacker-supplied link inside a
+message the bot vouches for. Text inside a code entity is exempt, so every extracted
+value is wrapped in a code span, where only the backtick and backslash need escaping.
+Both behaviors were confirmed against the live Bot API by inspecting the entities
+Telegram returns.
+
+Every other message (errors, prompts, duplicate and cancellation notices) remains
+literal plain text with no parse_mode, which needs no escaping at all.
 
 Text delegates to PendingWorkflow.reply; unsupported messages receive a photo-required
 response. Category interpretation remains deterministic application validation. User-correctable outcomes (unreadable/Low confidence),

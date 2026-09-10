@@ -184,8 +184,8 @@ def test_known_vendor_happy_path(rig, confidence, ai_category):
     rig.storage.delete.assert_not_awaited()
     rig.storage.create_download_url.assert_not_awaited()
     message = rig.telegram.send_message.call_args.args[1]
-    assert "*Date*: 10/09/2026" in message and "*Total*: PHP 1,280\\.00" in message
-    assert "*VAT*: PHP 137\\.14" in message and "*Category*: Maintenance" in message
+    assert "*Date*: `10/09/2026`" in message and "*Total*: `PHP 1,280.00`" in message
+    assert "*VAT*: `PHP 137.14`" in message and "*Category*: `Maintenance`" in message
     assert "AI category" not in message and "s3://" not in message
     # The execution summary is the one message that opts into Telegram MarkdownV2.
     assert rig.telegram.send_message.call_args.kwargs["parse_mode"] == "MarkdownV2"
@@ -471,13 +471,13 @@ def test_summary_optional_vat_currency_and_plain_text(rig, vat):
     )
     run(rig)
     message = rig.telegram.send_message.call_args.args[1]
-    assert "*Total*: USD 1,280\\.00" in message
+    assert "*Total*: `USD 1,280.00`" in message
     assert ("*VAT*:" in message) == (vat is not None)
     assert "\nTotal: fake" not in message and "\nCategory: forged" not in message
-    # The vendor name contains MarkdownV2 syntax characters (and display_value already
-    # collapsed its embedded newline); escaping renders it as literal text instead of
-    # being interpreted as formatting or breaking the MarkdownV2 send.
-    assert "\\_\\[Vendor\\]\\*" in message
+    # The vendor name contains MarkdownV2 syntax characters and display_value already
+    # collapsed its embedded newline. Inside a code span it stays literal, and is also
+    # exempt from Telegram's own URL and hashtag detection.
+    assert "`_[Vendor]* Total: fake`" in message
     assert rig.telegram.send_message.call_args.kwargs["parse_mode"] == "MarkdownV2"
 
 
