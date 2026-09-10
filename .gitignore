@@ -1,0 +1,33 @@
+# Credentials and local environment
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python and tooling
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local receipt data and logs (use synthetic/redacted test fixtures only)
+data/
+uploads/
+receipts/
+*.log
+
+# Editor and machine-local context
+.idea/
+.vscode/
+.DS_Store
+.agents/
+.codex/

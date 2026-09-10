@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "second-brain-receipts"
+version = "0.1.0"
+description = "A small, production-minded Telegram receipt-processing POC"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["pydantic==2.13.5", "pydantic-settings==2.15.0", "Pillow==12.3.0", "openai==3.11.0", "supabase==2.31.0", "boto3==1.43.91", "fastapi==0.141.1", "uvicorn==0.52.4", "httpx==0.28.1"]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1", "ruff==0.16.6", "mypy==1.20.2", "boto3-stubs[s3]==1.43.91"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+second_brain_receipts = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+strict = true
+
+[tool.ruff.lint.isort]
+known-third-party = ["supabase"]

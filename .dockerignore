@@ -1,0 +1,42 @@
+# Never let credentials or local state reach the build context or image layers.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+.git/
+.gitignore
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Not needed at runtime: tests, migrations and documentation.
+tests/
+supabase/
+docs/
+AGENTS.md
+Dockerfile
+.dockerignore
+
+# Local receipt data and logs
+data/
+uploads/
+receipts/
+*.log
+
+.idea/
+.vscode/
+.DS_Store
+.agents/
+.codex/
