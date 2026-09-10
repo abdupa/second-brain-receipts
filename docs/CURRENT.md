@@ -5,7 +5,8 @@
 - Status: complete. V0.1-010 has not started.
 - Completed: one shared bounded retry policy across all four provider boundaries,
   per-operation retryability decided by idempotence, reconciled writes for Supabase
-  inserts and S3 uploads, an escaped MarkdownV2 summary card, and a runtime Dockerfile.
+  inserts and S3 uploads, an escaped MarkdownV2 summary card, a runtime Dockerfile,
+  and a CI pipeline running every check on each push.
 - Active work: none. No milestone blocker remains.
 - Next action: V0.1-010 only when authorized; exact scope below.
 
@@ -17,6 +18,9 @@ Created:
   card formatting, injection resistance and the message-length ceiling.
 - Dockerfile and .dockerignore: two-stage runtime image, unprivileged user,
   health check, no credentials in any layer.
+- .github/workflows/ci.yml: three jobs covering unit tests/lint/types, migrations
+  plus SQL and concurrency checks on disposable PostgreSQL, and a container build
+  with a start-up smoke test. No job requires a secret.
 
 Changed: the OpenAI, Telegram, Supabase and S3 adapters now call `retry`;
 `_insert_reconciled` and `S3ReceiptImageStorage.store` reconcile uncertain writes;
@@ -138,6 +142,12 @@ PASS: completion rechecks wall-clock expiry after waiting on a row lock
 ```
 
 Test rows were rolled back or deleted and the disposable container removed.
+
+Every CI job was rehearsed locally with its exact commands before being committed,
+rather than pushed untested: the readiness loop, migration application, both SQL
+suites, both concurrency scripts under plain `python3` with no virtualenv, the image
+build, the health and 401 assertions, the unprivileged-user check and the
+no-credentials-in-image check all pass as written.
 
 Default tests retained the socket-blocking guard and made zero external network
 calls. Fixtures were synthetic or official SDK MockTransports. No real Telegram,

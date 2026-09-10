@@ -11,7 +11,7 @@ V0.1-006 added authenticated Telegram ingress, durable transport deduplication a
 bounded download/send adapters. V0.1-007 connects known-vendor receipt processing.
 V0.1-008 adds persistent unknown-vendor category confirmation and atomic completion.
 V0.1-009 adds bounded provider retries with reconciled writes, the escaped MarkdownV2
-execution-summary card, and the runtime container image.
+execution-summary card, the runtime container image and the CI pipeline.
 
 Client assignment explicitly requires S3 or Google Drive for receipt images; AWS S3 was selected.
 This corrects the earlier Supabase Storage assumption. Store only the validated,

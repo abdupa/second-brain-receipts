@@ -75,6 +75,16 @@ python -m ruff format --check .
 python -m mypy
 ```
 
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same checks on every
+push and pull request, in three jobs: the unit suite with lint and strict types; the
+migrations plus the SQL constraint, privilege and concurrency checks against a
+disposable PostgreSQL 17 container; and a container build with a start-up smoke test.
+The database job runs the exact commands documented in
+[tests/README.md](tests/README.md), so local and CI verification cannot drift apart.
+No job needs a secret: the unit suite runs in test mode with sockets blocked, and the
+image smoke test boots with deliberately fake values to prove no real credential is
+required to start and that an unauthenticated webhook is rejected before any work.
+
 The migration is [initial receipt schema](supabase/migrations/202609100001_initial_receipt_schema.sql).
 Apply it and [S3 references migration](supabase/migrations/202609100002_s3_storage_references.sql)
 and [Telegram claims migration](supabase/migrations/202609100003_telegram_updates.sql)
