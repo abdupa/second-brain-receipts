@@ -7,7 +7,9 @@ duplicate protection, private S3 storage, receipt insertion and a formatted
 confirmation card. Unknown vendors persist a category question and resume on a later
 reply; vendor memory, final receipt and pending completion commit atomically in
 PostgreSQL. Every provider call runs under one bounded retry policy, with writes
-reconciled rather than blindly replayed. The service ships as a container image.
+reconciled rather than blindly replayed. The service ships as a container image with
+CI. The OpenAI Vision path is verified against the live API; see
+[current status](docs/CURRENT.md) for measured latency and the limits of that check.
 
 Start with [requirements](docs/REQUIREMENTS.md), [architecture](docs/ARCHITECTURE.md),
 [implementation plan](docs/IMPLEMENTATION_PLAN.md), [current status](docs/CURRENT.md)

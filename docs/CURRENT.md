@@ -143,6 +143,56 @@ PASS: completion rechecks wall-clock expiry after waiting on a row lock
 
 Test rows were rolled back or deleted and the disposable container removed.
 
+### Live OpenAI Vision verification
+
+One real gpt-4o call path was exercised against the live API using a rendered
+photographed receipt with known values (rotation, uneven lighting, sensor noise).
+Telegram, Supabase and S3 remain unverified live.
+
+```text
+input 672 KB, 2200x2900  ->  167 KB, 1214x1600  (75% smaller, metadata stripped)
+
+image compression     median   155 ms   range 147-163 ms
+gpt-4o extraction     median  2806 ms   range 1796-3539 ms
+both stages           median  2969 ms
+```
+
+Extraction was correct on vendor, total and VAT, at High confidence. Two behaviors
+were observed that offline tests could not have shown:
+
+- Money and dates were byte-identical across five runs, but the vendor name's
+  capitalization varied between three spellings. Because vendor identity, duplicate
+  detection and category memory all key on `normalize_vendor_name`, which casefolds,
+  all three collapse to one identity. This is empirical confirmation that the
+  normalization step is load-bearing, not decorative.
+- An ambiguous numeric date is read with the US month-first convention and still
+  reported as High confidence. The test receipt printed `08/09/2026` intending
+  8 September, and every run returned 9 August, despite Philippine regional clues on
+  the receipt (Cebu City address, VAT REG TIN). Adding a prompt instruction to use
+  regional clues and lower confidence changed nothing across three further runs, so no
+  prompt change was adopted. The correct fix is deterministic application logic, a
+  configured date-order preference applied to a raw date string, consistent with this
+  project's rule that the model reads and the application decides. That needs a wire
+  schema change to carry the date as printed, so it is deferred rather than rushed.
+  Until then, an ambiguous day-month date can be recorded wrongly at High confidence.
+
+### A live-only defect this uncovered
+
+The first live call failed with `vision_invalid_response` while the API itself
+returned a perfectly valid receipt. The defensive re-validation in `_parse_response`
+used `response.model_dump(warnings=False)`, which emits SDK field names rather than
+wire aliases. The Responses API echoes back the requested `text.format`, whose JSON
+schema field is declared as `schema_` with the alias `schema`, so the dumped payload
+lost the alias and re-validation rejected it as a missing required field.
+
+The offline suite could not catch this because its response fixture omitted the
+`text` block entirely. The fixture now includes the format echo exactly as the live
+API returns it, and reverting the one-word fix makes 11 tests fail, so the regression
+is now covered. Every successful extraction went through this path, meaning the
+shipped code would have failed on every real receipt despite a fully green suite.
+This is the clearest argument in this repository for why offline verification, however
+thorough, is not a substitute for one live call.
+
 Every CI job was rehearsed locally with its exact commands before being committed,
 rather than pushed untested: the readiness loop, migration application, both SQL
 suites, both concurrency scripts under plain `python3` with no virtualenv, the image
@@ -169,6 +219,11 @@ registered, and no live extraction or Telegram message occurred.
 - Claims remain at-most-once attempts; received/failed updates do not auto-replay.
 - MarkdownV2 escaping is verified against Telegram's documented reserved set in unit
   tests, not against the live Bot API. A live send remains a deployment check.
+- Only the OpenAI Vision path has been exercised live. Telegram delivery, Supabase
+  writes and S3 uploads are still offline-verified only, so the end-to-end figure from
+  photo received to reply sent is not yet measured.
+- An ambiguous numeric date can be recorded with the wrong day and month at High
+  confidence. See the live verification section above.
 - Stand-in PostgreSQL roles and mocked HTTP do not prove live Supabase/PostgREST, S3
   privacy, Telegram delivery or extraction accuracy/latency. The container smoke test
   used fake credentials and therefore exercised start-up and routing only.

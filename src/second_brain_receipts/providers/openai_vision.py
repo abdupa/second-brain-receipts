@@ -220,7 +220,12 @@ class OpenAIReceiptVisionProvider:
         if not isinstance(response, Response):
             raise VisionResponseError()
         # The SDK may construct models without validating all response fields.
-        response = Response.model_validate(response.model_dump(warnings=False))
+        # by_alias is required, not cosmetic: several SDK fields are declared under a
+        # safe Python name with the wire name as an alias, notably the JSON-schema
+        # config's schema_ field aliased to "schema". A plain model_dump() emits the
+        # Python name, which model_validate() then rejects as a missing required
+        # field, so the round trip is only lossless with by_alias=True.
+        response = Response.model_validate(response.model_dump(by_alias=True, warnings=False))
         if response.error is not None:
             if response.error.code == "rate_limit_exceeded":
                 raise VisionRateLimitError()

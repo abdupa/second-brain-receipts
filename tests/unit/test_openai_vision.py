@@ -84,6 +84,18 @@ def response_body(text):
                 "content": [{"type": "output_text", "text": text, "annotations": []}],
             }
         ],
+        # The live API echoes the requested format back, including the JSON schema under
+        # its wire name "schema". The SDK stores that as schema_, so a response body
+        # without this block cannot exercise the alias round trip in _parse_response and
+        # would let an alias-losing model_dump regression pass unnoticed.
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "receipt_extraction",
+                "strict": True,
+                "schema": extraction_json_schema(),
+            }
+        },
         "parallel_tool_calls": False,
         "tool_choice": "auto",
         "tools": [],
